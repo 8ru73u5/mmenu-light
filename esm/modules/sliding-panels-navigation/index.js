@@ -1,5 +1,6 @@
 import { r, $ } from '../helpers';
 import * as support from '../support';
+import MmKeyboardNavigation from '../keyboard-navigation/index';
 var prefix = 'mm-spn';
 /**
  * Class for navigating in a mobile menu.
@@ -8,13 +9,14 @@ var MmSlidingPanelsNavigation = /** @class */ (function () {
     /**
      * Class for navigating in a mobile menu.
      *
-     * @param {HTMLElement} node            HTMLElement for the menu.
-     * @param {string}      title           The title for the menu.
-     * @param {string}      selectedClass   The class for selected listitems.
-     * @param {boolean}     slidingSubmenus Whether or not to use sliding submenus.
-     * @param {string}      theme           The color scheme for the menu.
+     * @param {HTMLElement} node               HTMLElement for the menu.
+     * @param {string}      title              The title for the menu.
+     * @param {string}      selectedClass      The class for selected list items.
+     * @param {boolean}     slidingSubmenus    Whether or not to use sliding submenus.
+     * @param {string}      theme              The color scheme for the menu.
+     * @param {boolean}     keyboardNavigation Whether or not to use keyboard navigation.
      */
-    function MmSlidingPanelsNavigation(node, title, selectedClass, slidingSubmenus, theme) {
+    function MmSlidingPanelsNavigation(node, title, selectedClass, slidingSubmenus, theme, keyboardNavigation) {
         this.node = node;
         this.title = title;
         this.slidingSubmenus = slidingSubmenus;
@@ -27,6 +29,9 @@ var MmSlidingPanelsNavigation = /** @class */ (function () {
         }
         this.node.classList.add(prefix + "--" + theme);
         this.node.classList.add(prefix + "--" + (this.slidingSubmenus ? 'navbar' : 'vertical'));
+        if (keyboardNavigation) {
+            this.keyboardNavigator = new MmKeyboardNavigation(this.node, this.selectedClass);
+        }
         this._setSelectedl();
         this._initAnchors();
     }
@@ -45,21 +50,20 @@ var MmSlidingPanelsNavigation = /** @class */ (function () {
      */
     MmSlidingPanelsNavigation.prototype.openPanel = function (panel) {
         /** Parent LI for the panel.  */
-        var listitem = panel.parentElement;
+        var listItem = panel.parentElement;
         //  Sliding submenus
         if (this.slidingSubmenus) {
             /** Title above the panel to open. */
             var title_1 = panel.dataset.mmSpnTitle;
             //  Opening the main level UL.
-            if (listitem === this.node) {
+            if (listItem === this.node) {
                 this.node.classList.add(prefix + "--main");
             }
-            //  Opening a sub level UL.
-            else {
+            else { //  Opening a sub level UL.
                 this.node.classList.remove(prefix + "--main");
                 //  Find title from parent LI.
                 if (!title_1) {
-                    r(listitem.children).forEach(function (child) {
+                    r(listItem.children).forEach(function (child) {
                         if (child.matches('a, span')) {
                             title_1 = child.textContent;
                         }
@@ -107,17 +111,17 @@ var MmSlidingPanelsNavigation = /** @class */ (function () {
         }
     };
     /**
-     * Initiate the selected listitem / open the current panel.
+     * Initiate the selected list item / open the current panel.
      */
     MmSlidingPanelsNavigation.prototype._setSelectedl = function () {
         /** All selected LIs. */
-        var listitems = $('.' + this.selectedClass, this.node);
+        var listItems = $('.' + this.selectedClass, this.node);
         /** The last selected LI. */
-        var listitem = listitems[listitems.length - 1];
+        var listItem = listItems[listItems.length - 1];
         /** The opened UL. */
         var panel = null;
-        if (listitem) {
-            panel = listitem.closest('ul');
+        if (listItem) {
+            panel = listItem.closest('ul');
         }
         if (!panel) {
             panel = this.node.querySelector('ul');
@@ -136,10 +140,7 @@ var MmSlidingPanelsNavigation = /** @class */ (function () {
          * @return  {boolean}       handled Whether or not the event was handled.
          */
         var clickAnchor = function (target) {
-            if (target.matches('a')) {
-                return true;
-            }
-            return false;
+            return target.matches('a');
         };
         /**
          * Click a LI or SPAN in the menu: open its submenu (if present).
@@ -148,20 +149,20 @@ var MmSlidingPanelsNavigation = /** @class */ (function () {
          * @return  {boolean}               Whether or not the event was handled.
          */
         var openSubmenu = function (target) {
-            /** Parent listitem for the submenu.  */
-            var listitem;
-            //  Find the parent listitem.
+            /** Parent list item for the submenu.  */
+            var listItem;
+            //  Find the parent list item.
             if (target.closest('span')) {
-                listitem = target.parentElement;
+                listItem = target.parentElement;
             }
             else if (target.closest('li')) {
-                listitem = target;
+                listItem = target;
             }
             else {
-                listitem = false;
+                listItem = false;
             }
-            if (listitem) {
-                r(listitem.children).forEach(function (panel) {
+            if (listItem) {
+                r(listItem.children).forEach(function (panel) {
                     if (panel.matches('ul')) {
                         _this.openPanel(panel);
                     }
@@ -191,16 +192,44 @@ var MmSlidingPanelsNavigation = /** @class */ (function () {
             }
             return false;
         };
-        this.node.addEventListener('click', function (evnt) {
-            var target = evnt.target;
+        this.node.addEventListener('click', function (event) {
+            var target = event.target;
             var handled = false;
             handled = handled || clickAnchor(target);
             handled = handled || openSubmenu(target);
             handled = handled || closeSubmenu(target);
             if (handled) {
-                evnt.stopImmediatePropagation();
+                event.stopImmediatePropagation();
             }
         });
+        if (this.keyboardNavigator) {
+            this.node.addEventListener('keydown', function (event) {
+                if (event.key === 'Tab') {
+                    _this.keyboardNavigator.selectVertically(event.shiftKey ? 'up' : 'down');
+                    setTimeout(function () {
+                        _this.node.focus();
+                    }, 10);
+                }
+                else if (event.key === _this.keyboardNavigator.keyBindings.openSubPanel) {
+                    var subPanel = _this.keyboardNavigator.openSubPanel();
+                    if (subPanel) {
+                        openSubmenu(subPanel);
+                    }
+                }
+                else if (event.key === _this.keyboardNavigator.keyBindings.backOneLevel) {
+                    closeSubmenu(_this.keyboardNavigator.backOneLevel());
+                }
+                else if (event.key === _this.keyboardNavigator.keyBindings.firePanel) {
+                    var subPanel = _this.keyboardNavigator.openSubPanel();
+                    if (subPanel) {
+                        openSubmenu(subPanel);
+                    }
+                    else {
+                        _this.keyboardNavigator.goToAnchorDestination();
+                    }
+                }
+            });
+        }
     };
     return MmSlidingPanelsNavigation;
 }());
